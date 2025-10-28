@@ -1,0 +1,6 @@
+{
+  "enabled": false,
+  "poll_interval": 2,
+  "command": "ping",
+  "args": ["8.8.8.8"]
+}
