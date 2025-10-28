@@ -1,12 +1,30 @@
 # eBPF Profiler Trigger
 
-Small executable that checks every X seconds the contents of `config.json`.
-If the content changes to true, execute a command (default `ping 8.8.8.8`).
-If the content changes to false, kill the running process.
+A lightweight Go-based utility that automatically starts and stops a custom command based on configuration stored in a
+JSON file.
 
-## Executing application
+## Overview
 
-1. Set values for `config.json`
-2. Run `./ebpf-profiler-trigger`
-3. Activate profiler by setting `enabled` to `true`
-4. Disable profiler by setting `enabled` to `false`
+This service monitors a `config.json` file and reacts to changes in the `enabled` flag:
+
+- When `"enabled": true`, it starts the configured command.
+- When `"enabled": false`, it stops the running process.
+- The file is checked periodically based on the value of `"poll_interval"` (in seconds).
+
+This allows you to remotely toggle profiling or tracing without manually managing background
+processes.
+
+---
+
+## Example Configuration (`config.json`)
+
+```json
+{
+  "enabled": false,
+  "poll_interval": 2,
+  "command": "ping",
+  "args": [
+    "8.8.8.8"
+  ]
+}
+```
