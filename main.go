@@ -17,29 +17,27 @@ type EbpfConfig struct {
 	PollInterval time.Duration `json:"poll_interval"`
 }
 
+const (
+	filePath            = "config.json"
+	defaultPollInterval = 2
+)
+
 func main() {
-	const filePath = "config.json"
-	var lastValue bool
-	var processId = -1
-	var pollInterval = 2 * time.Second
+	var (
+		lastEnabled  bool
+		processId    = -1
+		pollInterval = defaultPollInterval * time.Second
+	)
 
 	for {
-		data, err := os.ReadFile(filePath)
+		config, err := loadConfig(filePath)
 		if err != nil {
-			log.Printf("Error reading file: %v", err)
+			log.Printf("Error loading config: %v", err)
 			time.Sleep(pollInterval)
 			continue
 		}
 
-		var config EbpfConfig
-		err = json.Unmarshal(data, &config)
-		if err != nil {
-			log.Printf("Error parsing json: %v", err)
-			time.Sleep(pollInterval)
-			continue
-		}
-
-		if config.Enabled != lastValue {
+		if config.Enabled != lastEnabled && config.Command != "" {
 			log.Printf("Profiler changed to %v", config.Enabled)
 			if config.Enabled {
 				processId = executeProfiler(config.Command, config.Args...)
@@ -50,12 +48,33 @@ func main() {
 					processId = -1
 				}
 			}
-			lastValue = config.Enabled
+			lastEnabled = config.Enabled
 		}
 
-		pollInterval = config.PollInterval * time.Second
+		if config.PollInterval > 0 {
+			pollInterval = config.PollInterval * time.Second
+		}
+
 		time.Sleep(pollInterval)
 	}
+}
+
+func loadConfig(path string) (*EbpfConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var cfg EbpfConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+
+	if cfg.PollInterval == 0 {
+		cfg.PollInterval = defaultPollInterval
+	}
+
+	return &cfg, nil
 }
 
 func executeProfiler(command string, args ...string) int {
