@@ -1,12 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"log"
 	"os"
 	"os/exec"
-	"syscall"
 	"time"
 )
 
@@ -25,7 +25,7 @@ const (
 func main() {
 	var (
 		lastEnabled  bool
-		processId    = -1
+		cancelFn     context.CancelFunc
 		pollInterval = defaultPollInterval * time.Second
 	)
 
@@ -40,13 +40,12 @@ func main() {
 		if config.Enabled != lastEnabled && config.Command != "" {
 			log.Printf("Profiler changed to %v", config.Enabled)
 			if config.Enabled {
-				processId = executeProfiler(config.Command, config.Args...)
-			} else {
-
-				if processId > 0 {
-					stopProfiler(processId)
-					processId = -1
-				}
+				ctx, cancel := context.WithCancel(context.Background())
+				cancelFn = cancel
+				go executeProfiler(ctx, config.Command, config.Args...)
+			} else if cancelFn != nil {
+				cancelFn()
+				cancelFn = nil
 			}
 			lastEnabled = config.Enabled
 		}
@@ -77,23 +76,25 @@ func loadConfig(path string) (*EbpfConfig, error) {
 	return &cfg, nil
 }
 
-func executeProfiler(command string, args ...string) int {
-	fmt.Printf("Executing: %v %v\n", command, args)
-	cmd := exec.Command(command, args...)
+func executeProfiler(ctx context.Context, command string, args ...string) {
+	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Stdout = os.Stdout
-	err := cmd.Start()
-	if err != nil {
-		log.Fatal(err)
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		log.Printf("Failed to start command: %v", err)
+		return
 	}
-	log.Printf("Starting process %d\n", cmd.Process.Pid)
 
-	return cmd.Process.Pid
-}
-
-func stopProfiler(processId int) {
-	log.Printf("Killing process %d\n", processId)
-	err := syscall.Kill(processId, syscall.SIGTERM)
+	log.Printf("Started process %d", cmd.Process.Pid)
+	err := cmd.Wait()
 	if err != nil {
-		log.Printf("Error killing process %d: %v", processId, err)
+		// Check if command was canceled by context
+		if errors.Is(ctx.Err(), context.Canceled) {
+			log.Printf("Process %d stopped (context canceled)", cmd.Process.Pid)
+		} else {
+			log.Printf("Process %d exited with error: %v", cmd.Process.Pid, err)
+		}
+	} else {
+		log.Printf("Process %d finished successfully", cmd.Process.Pid)
 	}
 }
