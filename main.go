@@ -77,6 +77,7 @@ func loadConfig(path string) (*EbpfConfig, error) {
 }
 
 func executeProfiler(ctx context.Context, command string, args ...string) {
+	log.Printf("Executing: %v %v\n", command, args)
 	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
