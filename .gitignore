@@ -1,2 +1,6 @@
 .idea
 ebpf-profiler-trigger
+
+# Configuration files
+config*.json
+!config.example.json
